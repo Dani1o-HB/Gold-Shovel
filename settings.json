@@ -1,0 +1,6 @@
+{
+    "db_filename": "sessions.db",
+    "default_max_session": 25,
+    "default_break": 5,
+    "alarm_sound": "default_alarm.mp3"
+}
