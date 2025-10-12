@@ -13,13 +13,50 @@ else:
     # From .py file
     BASE_DIR = Path(__file__).parent
 SETTINGS_FILENAME = 'settings.json'
-timer_flags = {"running": False, "paused": False}
-cd_time_left = 0
+running_countdowns = []
 
 def main():
     print(' Gold Digging Shovel '.center(50,'='))
     start_repl()
 
+class Countdown:
+    def __init__(self, seconds: int):
+        self.running = False
+        self.paused = False
+        self.timeleft = seconds
+        self.timepaused = 0
+
+    def count(self):
+        # The actual timer function. Meant to be ran in a separate thread.
+        self.running = True
+        while self.running:
+            while self.paused:
+                time.sleep(1)
+                self.timepaused += 1
+            time.sleep(1)
+            self.timeleft -= 1
+            if self.timeleft <= 0:
+                self.running = False
+                print('Time out! Press Enter.')
+                play_alarm()
+    
+    def start(self):
+        # Use this to start the countdown in a separate thread.
+        countdown_obj = threading.Thread(target=self.count)
+        countdown_obj.start()
+
+    def cancel(self):  
+        # Resets the countdown to initial values. Use after start().
+        self.running = False
+        self.paused = False
+        return self.timeleft
+
+'''
+class Repl:
+    def __init__(self, commands: list):
+        self.commands = commands
+'''
+        
 def start_repl():
     settings = load_settings()
     while True:
@@ -94,8 +131,7 @@ c/cancel  - cancel session
 """ # This is all huinya for now.
 
 def break_timer(minutes):    # Returns elapsed time.
-    global timer_flags, cd_time_left
-    seconds = minutes * 60
+    global running_countdowns
     starttime = datetime.now()
     print(f'{timestamp()} Now take a break! {minutes} minutes.')
     print('''
@@ -105,87 +141,60 @@ c/cancel  - stop break
 q/quit    - terminate program.
     ''')  # TODO: implement print_actions()
 
-    # Starting countdown thread:
-    countdown_obj = threading.Thread(target=countdown, args=[seconds])
-    timer_flags['running'] = True
-    countdown_obj.start()
+    cd = Countdown(minutes)
+    running_countdowns.append(cd)
+    cd.start()
 
-    while timer_flags['running']:
+    while cd.running:
         # Get input command:
         user_input = repl_input()
         if not user_input:
             continue
-        if not timer_flags['running']:
+        if not cd.running:
             break
         # Pause timer:
         if user_input[0] in ('p', 'pause'):
-            timer_flags['paused'] = True
-            time_left = cd_pause('break')
+            cd.paused = True
+            time_left = cd_pause('break', cd)
             if time_left is not None:    # If canceled in the pause menu
                 elapsed = seconds - time_left
                 return elapsed
         # Time left:
         elif user_input[0] in ('t', 'time'):
-            print(f'{timestamp()} Time left: {cd_time_left}s')
+            print(f'{timestamp()} Time left: {cd.timeleft}s')
         # Stop timer:
         elif user_input[0] in ('c', 'cancel'):
-            time_left = cd_cancel_reset()
+            time_left = cd.cancel()
             elapsed = seconds - time_left
             return elapsed
         elif user_input[0] in ('q', 'quit'):
             quit_shovel()
 
     # Loop should end naturally only if the countdown reaches zero.
-    assert cd_cancel_reset() == 0
-    return seconds
-        
-def countdown(seconds):
-    # The actual timer function. Meant to be ran in a separate thread.
-    # Use cd_cancel_reset() to reset values to default after usage.
-    global timer_flags, cd_time_left, BASE_DIR
-    settings = load_settings()
-    cd_time_left = seconds
-    paused = 0
-    while timer_flags['running']:
-        while timer_flags['paused']:
-            time.sleep(1)
-            paused += 1
-        time.sleep(1)
-        if cd_time_left > 0:
-            cd_time_left -= 1
-        else:
-            timer_flags['running'] = False
-            print('Time out! Press Enter.')
-            playsound3.playsound(BASE_DIR/settings["alarm_sound"])
+    assert cd.running == False
+    assert cd.timeleft() <= 0
+    return cd.timeleft
 
-def cd_cancel_reset():
-    # Resets the countdown to initial values. Use after countodwn().
-    global timer_flags, cd_time_left
-    timer_flags['paused'] = False
-    timer_flags['running'] = False
-    time_left = cd_time_left
-    return time_left
-
-def cd_pause(repl_type): # Types: 'work', 'break'
+def cd_pause(repl_type, cd): # Types: 'work', 'break'
     print(f'''
-{timestamp()} Paused. Time left: {cd_time_left}s
+{timestamp()} Paused. Time left: {cd.timeleft}s
 r/resume   - continue break
 c/cancel   - stop break
 q/quit     - terminate program.
     ''') # TODO: implement print_actions()
-    while timer_flags['paused']:
+    while cd.paused:
         user_input = repl_input()
         if not user_input:
             continue
         if user_input[0] in ('r', 'resume'):  # Unpause
-            timer_flags['paused'] = False
+            cd.paused = False
             print(f'{timestamp()} Keep breaking!')
             return None
         elif user_input[0] in ('s', 'save') and repl_type == 'work':
             # TODO: Implement saving
             pass
         elif user_input[0] in ('c', 'cancel'):  # Cancel
-            time_left = cd_cancel_reset()
+            time_left = cd.cancel()
             return time_left
         elif user_input[0] in ('q', 'quit'):
             quit_shovel()
@@ -211,9 +220,18 @@ def print_actions(actions_list):
     # TODO
     pass
 
+def play_alarm():
+    global BASE_DIR
+    settings = load_settings()
+    sound_path = BASE_DIR/settings["alarm_sound"]
+    playsound3.playsound(sound_path)
+
+
 def quit_shovel():
+    global running_countdowns
     print('See ya!')
-    cd_cancel_reset()
+    for cd in running_countdowns:
+        cd.running = False
     sys.exit(0)
 
 if __name__ == '__main__':
