@@ -1,5 +1,9 @@
 #! python3
 # gsds.py - Timer and organizer for code learning.
+# TODO: Start work session in one 'Enter' click.
+# TODO: Add transition after work session to a break with one 'Enter' click.
+# TODO: Convert seconds into minutes and seconds when shown in time left.
+# TODO: Log work sessions to a batabase.
 
 import sys, time, json, shlex, threading, playsound3
 from datetime import datetime
@@ -76,10 +80,10 @@ def main_repl():
                     print('Number of minutes should be a digit.')
                     continue
                 else:
-                    work_repl(int(user_input[1]))
+                    running_repl('work', int(user_input[1]))
                     continue
             else:
-                work_repl(settings["default_max_session"])
+                running_repl('work', settings["default_max_session"])
                 continue
         # Start break timer:
         elif user_input[0] in ('b', 'break'):
@@ -88,56 +92,28 @@ def main_repl():
                     print('Number of minutes should be a digit.')
                     continue
                 else:
-                    break_repl(int(user_input[1]))
+                    running_repl('break', int(user_input[1]))
                     continue
             else:
-                break_repl(settings["default_break"])
+                running_repl('break', settings["default_break"])
                 continue
         # Quit:
         elif user_input[0] in ('q', 'quit'):
             quit_shovel()
 
-def work_repl(minutes):
-    print('To be developed.')
-    pass
-"""
-    global timer_flags, cd_time_left
-    starttime = datetime.now()
-    print(f'{timestamp()} Dig yourself out of a hole! {minutes} minutes.')
-    print('''
-p/pause   - pause session
-t/time    - time left
-s/save    - end session and save progress
-c/cancel  - cancel session
-    ''')
-    # TODO: Start countdown
-    while True:
-        # Get input command:
-        action = shlex.split(input('> '))
-        action[0] = action[0].lower()
-        # TODO: Pause timer:
-        if action[0] in ('p', 'pause'):
-            pass
-        # TODO: Time left:
-        elif action[0] in ('t', 'time'):
-            pass
-        # TODO: Save session:
-        elif action[0] in ('s', 'save'):
-            print('Logging sessions has yet to be implemented.')
-            timer_flags['running'] = False
-        # TODO: Stop timer:
-        elif action[0] in ('c', 'cancel'):
-            timer_flags['running'] = False
-    
-    # TODO: Play sound
-""" # This is all huinya for now.
-
-def break_repl(minutes:int) -> int:    # Returns elapsed time in seconds.
+def running_repl(r_type: str, minutes:int) -> int:    # Returns elapsed time in seconds.
     global running_countdowns
+    assert r_type in ('work', 'break')
     starttime = datetime.now()
     seconds = minutes * 60
-    print(f'{timestamp()} Now take a break! {minutes} minutes.')
-    print_actions('break', ['pause','time','cancel','quit'])
+    if r_type == 'work':
+        print(f'{timestamp()} Dig yourself out of the shit! {minutes} minutes.')
+    elif r_type == 'break':
+        print(f'{timestamp()} Now take a break! {minutes} minutes.')
+    actions = ['pause','time','cancel','quit']
+    if r_type == 'work':
+        actions.append('save')
+    print_actions(r_type, actions)
     cd = Countdown(seconds)
     running_countdowns.append(cd)
     cd.start()
@@ -159,6 +135,9 @@ def break_repl(minutes:int) -> int:    # Returns elapsed time in seconds.
         # Time left:
         elif user_input[0] in ('t', 'time'):
             cd.print_time()
+        # TODO: End session and save progress:
+        elif r_type == 'work' and user_input[0] in ('s', 'save'):
+            pass
         # Stop timer:
         elif user_input[0] in ('c', 'cancel'):
             cd.cancel()
@@ -170,6 +149,9 @@ def break_repl(minutes:int) -> int:    # Returns elapsed time in seconds.
     # Loop should end naturally only if the countdown reaches zero.
     assert cd.running == False
     assert cd.time_left <= 0
+    # TODO: Add logging progress.
+    if r_type == 'work':
+        pass
     return cd.time_left
 
 def pause_repl(cd_type: str, cd): # Types: 'work', 'break'
