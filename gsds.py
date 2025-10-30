@@ -1,7 +1,7 @@
 #! python3
 # TODO: Log work sessions to a database.
 
-import sys, time, json, shlex, threading, playsound3
+import sys, time, json, shlex, threading, playsound3, sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -13,10 +13,12 @@ else:
     # From .py file
     BASE_DIR = Path(__file__).parent
 SETTINGS_FILENAME = 'settings.json'
+DB_FILENAME = 'gsds.db'
 running_countdowns = []
 
 def main():
     print(' Gold Digging Shovel '.center(50,'='))
+    init_db()
     main_repl(default_action='start')
 
 class Countdown:
@@ -39,7 +41,10 @@ class Countdown:
             self.time_left -= 1
             if self.time_left <= 0:
                 self.running = False
-                print('Time out! Press Enter.')
+                if self.cd_type == 'work':
+                    print('Good work! Watcha been doing, champ?')
+                else:
+                    print('Time\'s up! Press Enter.')
                 play_alarm(self.cd_type)
     
     def start(self):
@@ -107,17 +112,18 @@ def main_repl(default_action = None):
 
 def running_repl(cd_type: str, minutes:int) -> int:    # Returns elapsed time in seconds.
     global running_countdowns
-    assert cd_type in ('work', 'break')
-    starttime = datetime.now()
     default_action = 'pause'
+    start_time = time.time()
+    assert cd_type in ('work', 'break')
     seconds = minutes * 60
+
     if cd_type == 'work':
         print(f'{timestamp()} Dig yourself out of the shit! {minutes} minutes.')
     elif cd_type == 'break':
         print(f'{timestamp()} Now take a break! {minutes} minutes.')
     actions = ['pause','time','cancel','quit']
     if cd_type == 'work':
-        actions.append('save')
+        actions.insert(2, 'save')
     print_actions(cd_type, actions, default_action=default_action)
     cd = Countdown(seconds, cd_type)
     running_countdowns.append(cd)
@@ -125,27 +131,34 @@ def running_repl(cd_type: str, minutes:int) -> int:    # Returns elapsed time in
 
     while cd.running:
         # Get input command:
-        user_input = repl_input()
+        user_input = input('> ')
+        if not cd.running: # Countdown ended.
+            break
         if not user_input:
             if default_action:
                 user_input = [default_action]
             else:
                 continue
-        if not cd.running:
-            break
+        else:
+            user_input = repl_input(user_input)
         # Pause timer:
         if user_input[0] in ('p', 'pause'):
             cd.pause()
-            pause_repl('break', cd)
-            if not cd.running:    # If canceled in the pause menu
-                elapsed = seconds - cd.time_left
-                return elapsed
+            user_input = pause_repl(cd_type, cd)
+            if user_input[0] in ('r', 'resume'):
+                continue
         # Time left:
-        elif user_input[0] in ('t', 'time'):
+        if user_input[0] in ('t', 'time'):
             print(f'{timestamp()} Time left: {cd.print_time()}')
-        # TODO: End session and save progress:
+        # End session and save progress:
         elif cd_type == 'work' and user_input[0] in ('s', 'save'):
-            pass
+            cd.cancel()
+            elapsed = seconds - cd.time_left
+            comment = input('Going so soon? Anyway, watcha been doing?\n')
+            if not comment:
+                comment = f'{t_convert(elapsed)} work session.'
+            save_session(int(start_time), elapsed, int(time.time()), comment)
+            return elapsed
         # Stop timer:
         elif user_input[0] in ('c', 'cancel'):
             cd.cancel()
@@ -157,17 +170,24 @@ def running_repl(cd_type: str, minutes:int) -> int:    # Returns elapsed time in
     # Loop should end naturally only if the countdown reaches zero.
     assert cd.running == False
     assert cd.time_left <= 0
-    # TODO: Add logging progress.
+    elapsed = seconds
+    # Logging progress.
     if cd_type == 'work':
-        pass
-    return cd.time_left
+        comment = user_input[:200].strip()
+        if not comment:
+            comment = f'{t_convert(elapsed)} work session.'
+        save_session(int(start_time), elapsed, int(time.time()), comment)
+    return elapsed
 
 def pause_repl(cd_type: str, cd): # Types: 'work', 'break'
     assert cd_type in ('work', 'break')
     default_action = 'resume'
+    actions = ['resume','cancel','quit']
+    if cd_type == 'work':
+        actions.insert(1, 'save')
     print(f'{timestamp()} Paused. Time left: {cd.print_time()}')
-    print_actions('break', ['resume','cancel','quit'], default_action=default_action)
-    
+    print_actions(cd_type, actions, default_action=default_action)
+
     while cd.paused:
         user_input = repl_input()
         if not user_input:
@@ -181,20 +201,18 @@ def pause_repl(cd_type: str, cd): # Types: 'work', 'break'
                 print(f'{timestamp()} Keep working!')
             elif cd_type == 'break':
                 print(f'{timestamp()} Keep breaking!')
-            return
+            return user_input
         elif user_input[0] in ('s', 'save') and cd_type == 'work':
-            # TODO: Implement saving
-            return
-        elif user_input[0] in ('c', 'cancel'):
-            cd.cancel()
-            return
-        elif user_input[0] in ('q', 'quit'):
-            quit_shovel()
+            return user_input
+        elif user_input[0] in ('c', 'cancel', 'q', 'quit'):
+            return user_input
 
 
-def repl_input():
+def repl_input(user_input=None):
     # Turns input into a list of arguments.
-    action = shlex.split(input('> '))
+    if user_input == None:
+        user_input = input('> ')
+    action = shlex.split(user_input)
     action = [x.lower() for x in action]
     return action
 
@@ -250,6 +268,20 @@ def play_alarm(cd_type):
     sound_path = BASE_DIR/settings[f"alarm_sound_{cd_type}"]
     playsound3.playsound(sound_path)
 
+def init_db():
+    global BASE_DIR, DB_FILENAME
+    with sqlite3.connect(BASE_DIR/DB_FILENAME) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, "\
+            "start_time INTEGER, duration_sec INTEGER, end_time INTEGER, comment TEXT) STRICT")
+
+def save_session(start_time: int, duration_sec: int, end_time: int, comment: str):
+    global BASE_DIR, DB_FILENAME
+    with sqlite3.connect(BASE_DIR/DB_FILENAME) as conn:
+        conn.execute("INSERT INTO sessions (start_time, duration_sec, end_time, comment) VALUES (?,?,?,?)",
+                     (start_time, duration_sec, end_time, comment))
+    
+def ask_comment():
+    print('Good work! Watcha been doing, champ?')
 
 def quit_shovel():
     global running_countdowns
