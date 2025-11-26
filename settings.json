@@ -1,7 +1,1 @@
-{
-    "db_filename": "sessions.db",
-    "default_max_session": 25,
-    "default_break": 5,
-    "alarm_sound_work": "default_alarm.mp3",
-    "alarm_sound_break": "default_alarm.mp3"
-}
+{"default_max_session": 25, "default_break": 5, "alarm_sound_work": "default_alarm.mp3", "alarm_sound_break": "default_alarm.mp3"}
