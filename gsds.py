@@ -336,12 +336,12 @@ def print_sessions(days):
                 duration = t_convert(row[2])
                 end_time = datetime.fromtimestamp(row[3]).strftime('%H:%M')
                 comment = row[4].strip()
-                print(f'{date.ljust(12)}|{start_time.ljust(6)}|{end_time.ljust(6)}|{duration.ljust(10)}|{comment[:85]}')
-                newline = comment[85:].strip()
+                print(f'{date.ljust(12)}|{start_time.ljust(6)}|{end_time.ljust(6)}|{duration.ljust(10)}|{comment[:82]}')
+                newline = comment[82:].strip()
                 while newline:
-                    #print(f'{''.ljust(12)}|{''.ljust(6)}|{''.ljust(6)}|{''.ljust(10)}|{newline[:85]}')
-                    print(''.ljust(38) + newline[:85])
-                    newline = newline[85:].strip()
+                    #print(f'{''.ljust(12)}|{''.ljust(6)}|{''.ljust(6)}|{''.ljust(10)}|{newline[:82]}')
+                    print(''.ljust(38) + newline[:82])
+                    newline = newline[82:].strip()
             print(''.center(50,'='))
             print(f'Total: {t_convert(total_duration)} in {total_sessions} sessions.')
 
