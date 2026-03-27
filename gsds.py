@@ -55,7 +55,7 @@ class Countdown:
                 self.time_left = 0
                 self.running = False
                 if self.cd_type == 'work':
-                    print('Good work! Watcha been doing, champ?')
+                    print('Good work! Watcha beewn doing, champ?')
                 else:
                     print('Time\'s up! Press Enter.')
                 play_alarm(self.cd_type)
@@ -88,7 +88,7 @@ class Countdown:
         
 def main_repl(default_action = None):
     settings = load_settings()
-    actions_list = ['start','break','quit']
+    actions_list = ['start','break','log','quit']
     while True:
         print_actions('main', actions_list, default_action=default_action)
         # Get input command:
@@ -121,6 +121,17 @@ def main_repl(default_action = None):
                     continue
             else:
                 running_repl('break', settings["default_break"])
+                continue
+        elif user_input[0] in ('l', 'log'):
+            if len(user_input) > 1:
+                if not user_input[1].isnumeric():
+                    print('Number of days should be a digit.')
+                    continue
+                else:
+                    print_sessions(int(user_input[1]))
+                    continue
+            else:
+                print_sessions('all')
                 continue
         # Quit:
         elif user_input[0] in ('q', 'quit'):
@@ -212,9 +223,9 @@ def pause_repl(cd_type: str, cd): # Types: 'work', 'break'
         if user_input[0] in ('r', 'resume'):  # Unpause
             cd.resume()
             if cd_type == 'work':
-                print(f'{timestamp()} Keep working!')
+                print(f'{timestamp()} Keep diggin\'!')
             elif cd_type == 'break':
-                print(f'{timestamp()} Keep breaking!')
+                print(f'{timestamp()} Keep chillin\'!')
             return user_input
         elif user_input[0] in ('s', 'save') and cd_type == 'work':
             return user_input
@@ -250,7 +261,6 @@ def t_convert(seconds: int) -> str:
     return output
     
 def init_settings(settings):
-    global settings_path
     if settings_path.exists():
         return
     else:
@@ -259,7 +269,6 @@ def init_settings(settings):
 
 
 def load_settings():
-    global settings_path
     with open(settings_path, 'r') as json_f:
         json_text = json_f.read()
         settings = json.loads(json_text)
@@ -275,6 +284,7 @@ def print_actions(cd_type, actions, default_action = None):
         'time':   f't/time            - time left',
         'save':   f's/save            - end session and save progress',
         'cancel': f'c/cancel          - stop {cd_type} session',
+        'log':    f'l/log <days>      - print logged sessions for the last N days. Default: all',
         'quit':   f'q/quit            - terminate Gold Digging Shovel'
         }
     for action in actions:
@@ -286,22 +296,55 @@ def print_actions(cd_type, actions, default_action = None):
 
 def play_alarm(cd_type):
     assert cd_type in ('work', 'break')
-    global BASE_DIR
     settings = load_settings()
     sound_path = BASE_DIR/settings[f"alarm_sound_{cd_type}"]
     playsound3.playsound(sound_path)
 
 def init_db():
-    global db_path
     with sqlite3.connect(db_path) as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, "\
             "start_time INTEGER, duration_sec INTEGER, end_time INTEGER, comment TEXT) STRICT")
 
 def save_session(start_time: int, duration_sec: int, end_time: int, comment: str):
-    global db_path
     with sqlite3.connect(db_path) as conn:
         conn.execute("INSERT INTO sessions (start_time, duration_sec, end_time, comment) VALUES (?,?,?,?)",
                      (start_time, duration_sec, end_time, comment))
+
+def print_sessions(days):
+    # TODO: add amount of days support
+    if days == 'all':
+        seconds = time.time()
+    else:
+        seconds = days*24*60*60
+
+    with sqlite3.connect(db_path) as conn:
+        session_list = conn.execute("SELECT * FROM sessions WHERE start_time > ? ORDER BY start_time ASC", [time.time()-seconds]).fetchall()
+        if not session_list:
+            print('No sessions recorded yet.')
+        else:
+            total_sessions = 0
+            total_duration = 0
+            print(f'Sessions recorded in last {days} days:')
+            print(' Gold Digging History '.center(50,'='))
+            print(f'{'DATE'.ljust(12)}|{'START'.ljust(6)}|{'END'.ljust(6)}|{'DURATION'.ljust(10)}|COMMENT')
+            print(''.center(50,'-'))
+            for row in session_list:
+                total_sessions += 1
+                total_duration += row[2]
+                date = datetime.fromtimestamp(row[1]).strftime('%d.%m.%Y')
+                start_time = datetime.fromtimestamp(row[1]).strftime('%H:%M')
+                duration = t_convert(row[2])
+                end_time = datetime.fromtimestamp(row[3]).strftime('%H:%M')
+                comment = row[4].strip()
+                print(f'{date.ljust(12)}|{start_time.ljust(6)}|{end_time.ljust(6)}|{duration.ljust(10)}|{comment[:85]}')
+                newline = comment[85:].strip()
+                while newline:
+                    #print(f'{''.ljust(12)}|{''.ljust(6)}|{''.ljust(6)}|{''.ljust(10)}|{newline[:85]}')
+                    print(''.ljust(38) + newline[:85])
+                    newline = newline[85:].strip()
+            print(''.center(50,'='))
+            print(f'Total: {t_convert(total_duration)} in {total_sessions} sessions.')
+
     
 def ask_comment():
     print('Good work! Watcha been doing, champ?')
